@@ -48,13 +48,13 @@ This hook reads the local session JSONL and calculates all three — no external
 
 ```bash
 curl -o ~/claude_code_token_status.py \
-  https://raw.githubusercontent.com/YOUR_USERNAME/Claude_Code_Token_Status/main/claude_code_token_status.py
+  https://raw.githubusercontent.com/airjy01/Claude_Code_Token_Status/main/claude_code_token_status.py
 ```
 
 Or clone:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/Claude_Code_Token_Status
+git clone https://github.com/airjy01/Claude_Code_Token_Status
 ```
 
 ### 2. Add the Stop hook to `~/.claude/settings.json`
