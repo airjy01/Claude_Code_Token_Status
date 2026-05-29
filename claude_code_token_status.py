@@ -6,7 +6,8 @@ Displays after every response:
   - Context window usage bar + %
   - Token counts (used / remaining / turns) + output tokens
   - Estimated session cost (per-model, with cache pricing)
-  - Usage-window reset countdown (rolling-window estimate)
+  - Official plan usage % + exact reset time (when credentials configured)
+  - Usage-window reset countdown (rolling-window estimate fallback)
   - Auto-checkpoint at 90%+ usage; warns at 75%+
 
 Works for Free / Pro / Max / API users — any plan that runs Claude Code CLI.
@@ -23,6 +24,27 @@ Environment variables (all optional):
   CLAUDE_TOKEN_BAR_WIDTH        progress bar character width (default: 28)
   CLAUDE_TOKEN_CURRENCY         display currency: NTD or USD (default: NTD)
   CLAUDE_TOKEN_USD_TO_NTD       USD → NTD exchange rate      (default: 31.5)
+
+Official API credentials (optional — enables accurate plan usage display):
+  CLAUDE_ORG_ID                 your organization UUID
+  CLAUDE_COOKIES                full cookie string from browser (recommended)
+    — OR —
+  CLAUDE_SESSION_KEY            sessionKey cookie value only (may be blocked by Cloudflare)
+
+  Or store them in files (env vars take precedence):
+    ~/.claude/.claude_org_id        — one line: the org UUID
+    ~/.claude/.claude_cookies       — one line: full cookie string (recommended)
+    ~/.claude/.claude_session_key   — one line: sessionKey value only (fallback)
+
+  How to set up (one-time, ~2 minutes):
+    1. Open claude.ai/settings/usage in Chrome
+    2. DevTools (F12) → Network → filter "Fetch/XHR" → refresh page
+    3. Click the "usage" request → Headers → Request Headers
+    4. Copy the full "Cookie:" header value
+    5. Copy the org UUID from the Request URL  (/api/organizations/<UUID>/usage)
+    6. echo '<paste cookie string>' > ~/.claude/.claude_cookies
+    7. echo '<paste UUID>'          > ~/.claude/.claude_org_id
+    Refresh when: official data stops appearing (cf_clearance expires ~1 day).
 """
 
 from __future__ import annotations   # Python 3.9 compat for str | None hints
@@ -92,6 +114,11 @@ CURRENCY         = os.environ.get("CLAUDE_TOKEN_CURRENCY",   "NTD").upper()
 _ENV_USD_TO_NTD  = os.environ.get("CLAUDE_TOKEN_USD_TO_NTD", "")   # manual override
 _RATE_CACHE_FILE = CLAUDE_DIR / ".usd_twd_cache"
 _RATE_CACHE_TTL  = 86_400   # 24 hours in seconds
+
+# ── Official API credentials (optional) ───────────────────────────────────────
+_COOKIES_FILE     = CLAUDE_DIR / ".claude_cookies"
+_SESSION_KEY_FILE = CLAUDE_DIR / ".claude_session_key"
+_ORG_ID_FILE      = CLAUDE_DIR / ".claude_org_id"
 
 
 def _fetch_usd_to_ntd() -> tuple[float, str]:
@@ -221,7 +248,8 @@ def parse_usage(session_file: Path):
                                      (NOT summed — cache_read grows each turn;
                                       summing would wildly overcount context size)
       output_total                 — cumulative output tokens across session
-      turns                        — assistant turn count
+      turns                        — assistant turn count (all-time in session)
+      turns_today                  — assistant turn count for today's date only
       window_start                 — earliest timestamp within rolling reset window
       cost_inp, cost_cc, cost_cr,
       cost_out                     — cumulative USD costs per category
@@ -232,12 +260,13 @@ def parse_usage(session_file: Path):
     Rolling-window calculation is the best available method for subscription users.
     """
     last_inp = last_cc = last_cr = 0
-    output_total = turns = 0
+    output_total = turns = turns_today = 0
     cost_inp = cost_cc = cost_cr = cost_out = 0.0
     window_start = None
     last_model: str = os.environ.get("CLAUDE_TOKEN_MODEL", "")
 
     now    = datetime.now(timezone.utc)
+    today  = now.date()
     cutoff = now - timedelta(hours=USAGE_RESET_HOURS)
 
     with open(session_file, encoding="utf-8") as fh:
@@ -259,6 +288,8 @@ def parse_usage(session_file: Path):
                     last_cr       = t_cr
                     output_total += t_out
                     turns        += 1
+                    if ts and ts.date() == today:
+                        turns_today += 1
 
                     if msg.get("model"):
                         last_model = msg["model"]
@@ -276,7 +307,7 @@ def parse_usage(session_file: Path):
                 continue
 
     return (last_inp, last_cc, last_cr,
-            output_total, turns, window_start,
+            output_total, turns, turns_today, window_start,
             cost_inp, cost_cc, cost_cr, cost_out, last_model)
 
 
@@ -345,6 +376,96 @@ def save_checkpoint(session_file: Path, pct_used: float, turns: int) -> Path | N
     return out_path
 
 
+def session_start_ts(session_file: Path) -> datetime | None:
+    """Return the timestamp of the first entry in the session file."""
+    with open(session_file, encoding="utf-8") as fh:
+        for raw in fh:
+            try:
+                d  = json.loads(raw)
+                ts = parse_ts(d.get("timestamp"))
+                if ts:
+                    return ts
+            except Exception:
+                continue
+    return None
+
+
+# ── Official claude.ai usage API ──────────────────────────────────────────────
+
+def _read_api_credentials() -> tuple[str | None, str | None]:
+    """Return (cookie_str, org_id).
+
+    cookie_str priority: CLAUDE_COOKIES env → ~/.claude/.claude_cookies file
+                         → build from CLAUDE_SESSION_KEY / ~/.claude/.claude_session_key
+    org_id priority:     CLAUDE_ORG_ID env  → ~/.claude/.claude_org_id file
+    Returns (None, None) if essential values are missing.
+    """
+    def _file(p: Path) -> str:
+        return p.read_text().strip()
+
+    # ── cookie string ──
+    cookie_str = os.environ.get("CLAUDE_COOKIES", "").strip()
+    if not cookie_str:
+        try:
+            cookie_str = _file(_COOKIES_FILE)
+        except Exception:
+            pass
+    if not cookie_str:
+        # fall back: build minimal cookie from sessionKey only
+        sk = os.environ.get("CLAUDE_SESSION_KEY", "").strip()
+        if not sk:
+            try:
+                sk = _file(_SESSION_KEY_FILE)
+            except Exception:
+                pass
+        if sk:
+            cookie_str = f"sessionKey={sk}"
+
+    # ── org id ──
+    org_id = os.environ.get("CLAUDE_ORG_ID", "").strip()
+    if not org_id:
+        try:
+            org_id = _file(_ORG_ID_FILE)
+        except Exception:
+            pass
+
+    if cookie_str and org_id:
+        return cookie_str, org_id
+    return None, None
+
+
+def _fetch_official_usage(cookie_str: str, org_id: str) -> dict | None:
+    """Query claude.ai/api/organizations/{org_id}/usage. Returns parsed JSON or None."""
+    from urllib.request import urlopen, Request
+
+    url = f"https://claude.ai/api/organizations/{org_id}/usage"
+    req = Request(url, headers={
+        "cookie": cookie_str,
+        "user-agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/148.0.0.0 Safari/537.36"
+        ),
+        "accept": "application/json, text/plain, */*",
+        "accept-language": "en-US,en;q=0.9",
+        "referer": "https://claude.ai/settings/usage",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "sec-ch-ua": '"Chromium";v="148", "Google Chrome";v="148", "Not-A.Brand";v="99"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "anthropic-client-platform": "web_claude_ai",
+    })
+    try:
+        with urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                return json.loads(resp.read())
+    except Exception:
+        pass
+    return None
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -354,9 +475,13 @@ def main():
         return
 
     (inp, cache_create, cache_read,
-     output_total, turns, window_start,
+     output_total, turns, turns_today, window_start,
      cost_inp, cost_cc, cost_cr, cost_out,
      last_model) = parse_usage(session_file)
+
+    # Try official API for accurate plan usage (non-blocking; falls back to estimate)
+    cookie_str, org_id = _read_api_credentials()
+    official = _fetch_official_usage(cookie_str, org_id) if cookie_str else None
 
     context_used      = cache_read + cache_create + inp
     context_remaining = max(0, CONTEXT_WINDOW - context_used)
@@ -376,19 +501,56 @@ def main():
     elif pct_used >= 75:
         warn = "  ⚠️  ≥75% — consider /session-summary to preserve progress"
 
-    # reset countdown (rolling window — best available for Claude Code subscriptions)
-    if window_start:
-        now       = datetime.now(timezone.utc)
+    # cross-day session note
+    now_local   = datetime.now(LOCAL_TZ)
+    start_ts    = session_start_ts(session_file)
+    cross_day_note = ""
+    if start_ts:
+        start_local = start_ts.astimezone(LOCAL_TZ)
+        if start_local.date() < now_local.date():
+            turns_prev = turns - turns_today
+            cross_day_note = (
+                f"\n📅 Session from {start_local.strftime('%b %d')} — "
+                f"{turns_prev} turns carried from previous day(s)"
+            )
+
+    # turns display: show today vs total when session spans multiple days
+    if turns_today < turns:
+        turns_display = f"({turns_today} today / {turns} total turns)"
+    else:
+        turns_display = f"({turns} turns)"
+
+    # Rate limit line: official API data takes priority over rolling-window estimate
+    now_utc = datetime.now(timezone.utc)
+    if official and official.get("five_hour"):
+        fh       = official["five_hour"]
+        util_5h  = fh["utilization"]
+        reset_dt = parse_ts(fh.get("resets_at"))
+        if reset_dt and (remaining := reset_dt - now_utc).total_seconds() > 0:
+            h, rem = divmod(int(remaining.total_seconds()), 3600)
+            m = rem // 60
+            reset_line = (
+                f"\nPlan 5h: {util_5h:.0f}% used — reset in {h}h {m:02d}m"
+                f"  ({reset_dt.astimezone(LOCAL_TZ).strftime('%H:%M')} local)  ✓"
+            )
+        else:
+            reset_line = "\n✅ Plan 5h: RESET — fresh capacity  ✓"
+        if official.get("seven_day"):
+            sd = official["seven_day"]
+            reset_7d_dt = parse_ts(sd.get("resets_at"))
+            if reset_7d_dt:
+                reset_line += f"  |  7d: {sd['utilization']:.0f}% (resets {reset_7d_dt.astimezone(LOCAL_TZ).strftime('%a %H:%M')})"
+    elif window_start:
         reset_at  = window_start + timedelta(hours=USAGE_RESET_HOURS)
-        remaining = reset_at - now
+        remaining = reset_at - now_utc
         if remaining.total_seconds() > 0:
             h, rem = divmod(int(remaining.total_seconds()), 3600)
             m = rem // 60
-            reset_line = f"\nReset in: {h}h {m:02d}m  ({reset_at.astimezone(LOCAL_TZ).strftime('%H:%M')} local)"
+            reset_line = f"\nRate limit: reset in {h}h {m:02d}m  ({reset_at.astimezone(LOCAL_TZ).strftime('%H:%M')} local)  ~est"
         else:
-            reset_line = "\nReset: window elapsed — usage available"
+            reset_line = "\n✅ Rate limit: RESET — fresh capacity"
     else:
-        reset_line = "\nReset: no recent activity (window reset)"
+        reset_line = "\n✅ Rate limit: RESET — fresh capacity"
 
     # cost display
     session_cost = cost_inp + cost_cc + cost_cr + cost_out
@@ -407,10 +569,11 @@ def main():
     cost_line  = f"\nAPI equiv. (est.): {_fmt_cost(session_cost, rate)} ({model_label}, {cur_label}){breakdown}"
 
     msg = (
-        f"Token [{bar}] {pct_used:.1f}%{warn}\n"
+        f"Token [{bar}] {pct_used:.1f}%{warn}"
+        f"{cross_day_note}\n"
         f"Used {context_used:,} / {CONTEXT_WINDOW:,}   "
         f"Remaining {context_remaining:,}   "
-        f"Out {output_total:,}   ({turns} turns)"
+        f"Out {output_total:,}   {turns_display}"
         f"{cost_line}\n"
         f"Session: {session_file.name[:12]}…"
         f"{reset_line}"
