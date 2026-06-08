@@ -4,12 +4,15 @@ Review the current session, generate a structured summary of all tasks completed
 
 ## Instructions
 
-1. Review the conversation history in this session
-2. Generate a structured summary following the format below
-3. Save it as a new memory file using the Write tool at:
-   `~/.claude/projects/-home-airjy/memory/session_summary_YYYYMMDD.md`
-4. Update `~/.claude/projects/-home-airjy/memory/MEMORY.md` to include a pointer to the new file
-5. Report what was saved
+1. Auto-detect the memory directory:
+   - Project slug = current `$PWD` with every `/` replaced by `-`
+   - Memory path = `~/.claude/projects/<slug>/memory/`
+   - Example: if `$PWD` is `/home/jack`, slug is `-home-jack`, path is `~/.claude/projects/-home-jack/memory/`
+2. Review the conversation history in this session
+3. Generate a structured summary following the format below
+4. Save it as a new memory file at: `<memory_path>/session_summary_YYYYMMDD.md`
+5. Update `<memory_path>/MEMORY.md` to include a pointer to the new file
+6. Report what was saved
 
 ## Summary Format
 

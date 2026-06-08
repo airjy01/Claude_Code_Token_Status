@@ -4,6 +4,10 @@ A Claude Code Stop hook that shows **context usage**, **session cost**, **offici
 
 Works with **all Claude Code plans**: Free, Pro, Max, and API (pay-per-token).
 
+**Two modes:**
+- **Estimate mode** (default, zero setup): rolling-window approximation from local JSONL
+- **Official mode** (optional credentials): real plan utilization % and exact reset time from claude.ai API
+
 ```
 Context (65,575)  [█████████░░░░░░░░░░░░░░░░░░░] 33%  / 200,000   Rem 134,425   Out 60,121   (86 turns)
 Token 5h:         [████████████████░░░░░░░░░░░░] 59% — reset in  0d 0h 57m  (13:00 06/08 Mon)
@@ -99,12 +103,52 @@ echo 'your-org-uuid-here' > ~/.claude/.claude_org_id
 
 ---
 
+## Official API Setup (Optional)
+
+Without setup, the reset countdown is a rolling-window estimate (`~est`).  
+With setup, you get the **exact plan utilization % and reset time** (`✓`) — same data as claude.ai Settings → Usage.
+
+**Why credentials are needed:** Claude Code CLI cannot access Anthropic's rate-limit data directly. The script calls the same internal API that the claude.ai web app uses, which requires browser session cookies.
+
+### One-time setup (~2 minutes)
+
+1. Open **chrome.ai/settings/usage** in Chrome
+2. Press **F12** → **Network** tab → click **Fetch/XHR** filter → refresh the page (F5)
+3. Click the **`usage`** request in the list
+4. In the **Headers** panel, copy:
+   - The full **Cookie:** header value (right-click → Copy value)
+   - The org UUID from the **Request URL** (`/api/organizations/<UUID>/usage`)
+5. Save to files:
+
+```bash
+echo '<paste full cookie string here>' > ~/.claude/.claude_cookies
+echo '<paste UUID here>'               > ~/.claude/.claude_org_id
+chmod 600 ~/.claude/.claude_cookies
+```
+
+**When to refresh:** The `cf_clearance` cookie expires periodically. When the `✓` disappears and `~est` returns, repeat steps 1–5.
+
+### Environment variable alternative
+
+```bash
+export CLAUDE_COOKIES="<full cookie string>"
+export CLAUDE_ORG_ID="<org UUID>"
+```
+
+Or use only `sessionKey` (may be blocked by Cloudflare without `cf_clearance`):
+
+```bash
+echo 'sk-ant-sid02-...' > ~/.claude/.claude_session_key
+```
+
+---
+
 ## Configuration
 
 | Variable | Default | Description |
 |---|---|---|
 | `CLAUDE_TOKEN_CONTEXT_WINDOW` | `200000` | Context window size |
-| `CLAUDE_TOKEN_RESET_HOURS` | `5` | Usage window length (hours) |
+| `CLAUDE_TOKEN_RESET_HOURS` | `5` | Usage window length for estimate fallback (hours) |
 | `CLAUDE_TOKEN_TZ_OFFSET` | `8` | UTC offset (e.g. `-5` for US Eastern) |
 | `CLAUDE_TOKEN_CHECKPOINT_DIR` | `~/.claude/projects/<slug>/memory` | Checkpoint save directory |
 | `CLAUDE_TOKEN_MODEL` | auto | Override model for pricing |
