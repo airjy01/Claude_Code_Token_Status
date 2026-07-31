@@ -8,7 +8,7 @@ Displays after every response:
   - Estimated session cost (per-model, with cache pricing)
   - Official plan usage % + exact reset time (when credentials configured)
   - Usage-window reset countdown (rolling-window estimate fallback)
-  - Auto-checkpoint at 90%+ usage; warns at 75%+
+  - Auto-checkpoint at 85%+ usage; warns at 75%+
 
 Works for Free / Pro / Max / API users — any plan that runs Claude Code CLI.
 Cost display is equivalent API pricing; subscription users see a reference value.
@@ -16,7 +16,9 @@ Cost display is equivalent API pricing; subscription users see a reference value
 Auto-detects project directory from $PWD — no hardcoded paths.
 
 Environment variables (all optional):
-  CLAUDE_TOKEN_CONTEXT_WINDOW   context window size          (default: 200000)
+  CLAUDE_TOKEN_CONTEXT_WINDOW   context window size          (default: 200000,
+                                then calibrated upward from the largest prompt
+                                that actually got a reply — see observed_window_floor)
   CLAUDE_TOKEN_RESET_HOURS      usage window length hours    (default: 5)
   CLAUDE_TOKEN_TZ_OFFSET        UTC offset, e.g. -5 for EST  (default: 8)
   CLAUDE_TOKEN_CHECKPOINT_DIR   where to save checkpoints    (default: ~/.claude/projects/<slug>/memory)
@@ -25,26 +27,10 @@ Environment variables (all optional):
   CLAUDE_TOKEN_CURRENCY         display currency: NTD or USD (default: NTD)
   CLAUDE_TOKEN_USD_TO_NTD       USD → NTD exchange rate      (default: 31.5)
 
-Official API credentials (optional — enables accurate plan usage display):
-  CLAUDE_ORG_ID                 your organization UUID
-  CLAUDE_COOKIES                full cookie string from browser (recommended)
-    — OR —
-  CLAUDE_SESSION_KEY            sessionKey cookie value only (may be blocked by Cloudflare)
-
-  Or store them in files (env vars take precedence):
-    ~/.claude/.claude_org_id        — one line: the org UUID
-    ~/.claude/.claude_cookies       — one line: full cookie string (recommended)
-    ~/.claude/.claude_session_key   — one line: sessionKey value only (fallback)
-
-  How to set up (one-time, ~2 minutes):
-    1. Open claude.ai/settings/usage in Chrome
-    2. DevTools (F12) → Network → filter "Fetch/XHR" → refresh page
-    3. Click the "usage" request → Headers → Request Headers
-    4. Copy the full "Cookie:" header value
-    5. Copy the org UUID from the Request URL  (/api/organizations/<UUID>/usage)
-    6. echo '<paste cookie string>' > ~/.claude/.claude_cookies
-    7. echo '<paste UUID>'          > ~/.claude/.claude_org_id
-    Refresh when: official data stops appearing (cf_clearance expires ~1 day).
+Official plan usage (5h/7d bars) — no setup needed:
+  Reads OAuth token automatically from ~/.claude/.credentials.json (written by Claude Code).
+  Token auto-refreshed each Claude Code session. Override via env var:
+    CLAUDE_OAUTH_TOKEN            OAuth access token (sk-ant-oat01-...)
 """
 
 from __future__ import annotations   # Python 3.9 compat for str | None hints
@@ -100,8 +86,18 @@ _slug = _pwd.replace("/", "-")
 CLAUDE_DIR  = Path.home() / ".claude"
 PROJECT_DIR = CLAUDE_DIR / "projects" / _slug
 
+def _default_context_window() -> int:
+    # settings.json model 帶 [1m] 尾碼 = 1M context beta
+    try:
+        model = json.loads((Path.home() / ".claude" / "settings.json").read_text()).get("model", "")
+        if "[1m]" in model:
+            return 1_000_000
+    except Exception:
+        pass
+    return 200_000
+
 # ── Configurable via environment variables ────────────────────────────────────
-CONTEXT_WINDOW    = int(os.environ.get("CLAUDE_TOKEN_CONTEXT_WINDOW", 200_000))
+CONTEXT_WINDOW    = int(os.environ.get("CLAUDE_TOKEN_CONTEXT_WINDOW", 0)) or _default_context_window()
 USAGE_RESET_HOURS = int(os.environ.get("CLAUDE_TOKEN_RESET_HOURS",    5))
 BAR_WIDTH         = int(os.environ.get("CLAUDE_TOKEN_BAR_WIDTH",      28))
 _tz_offset        = int(os.environ.get("CLAUDE_TOKEN_TZ_OFFSET",      8))
@@ -116,9 +112,7 @@ _RATE_CACHE_FILE = CLAUDE_DIR / ".usd_twd_cache"
 _RATE_CACHE_TTL  = 86_400   # 24 hours in seconds
 
 # ── Official API credentials (optional) ───────────────────────────────────────
-_COOKIES_FILE     = CLAUDE_DIR / ".claude_cookies"
-_SESSION_KEY_FILE = CLAUDE_DIR / ".claude_session_key"
-_ORG_ID_FILE      = CLAUDE_DIR / ".claude_org_id"
+_ORG_ID_FILE      = CLAUDE_DIR / ".claude_org_id"   # legacy, unused but kept for compat
 
 
 def _fetch_usd_to_ntd() -> tuple[float, str]:
@@ -267,6 +261,8 @@ def parse_usage(session_file: Path):
       last_inp, last_cc, last_cr   — context snapshot from last assistant turn
                                      (NOT summed — cache_read grows each turn;
                                       summing would wildly overcount context size)
+      max_prompt                   — largest single-turn prompt seen this session;
+                                     used to self-calibrate CONTEXT_WINDOW upward
       output_total                 — cumulative output tokens across session
       turns                        — assistant turn count (all-time in session)
       turns_today                  — assistant turn count for today's date only
@@ -279,7 +275,7 @@ def parse_usage(session_file: Path):
     don't receive rate-limit response headers (issue #36056, pending).
     Rolling-window calculation is the best available method for subscription users.
     """
-    last_inp = last_cc = last_cr = 0
+    last_inp = last_cc = last_cr = max_prompt = 0
     output_total = turns = turns_today = 0
     cost_inp = cost_cc = cost_cr = cost_out = 0.0
     window_start = None
@@ -303,9 +299,13 @@ def parse_usage(session_file: Path):
                     t_cr  = usage.get("cache_read_input_tokens", 0)
                     t_out = usage.get("output_tokens", 0)
 
-                    last_inp      = t_inp
-                    last_cc       = t_cc
-                    last_cr       = t_cr
+                    # Sub-agent turns live in the same JSONL; they must not be
+                    # mistaken for the main loop's context snapshot.
+                    if not entry.get("isSidechain"):
+                        last_inp   = t_inp
+                        last_cc    = t_cc
+                        last_cr    = t_cr
+                        max_prompt = max(max_prompt, t_inp + t_cc + t_cr)
                     output_total += t_out
                     turns        += 1
                     if ts and ts.date() == today:
@@ -326,13 +326,39 @@ def parse_usage(session_file: Path):
             except Exception:
                 continue
 
-    return (last_inp, last_cc, last_cr,
+    return (last_inp, last_cc, last_cr, max_prompt,
             output_total, turns, turns_today, window_start,
             cost_inp, cost_cc, cost_cr, cost_out, last_model)
 
 
+def observed_window_floor() -> int:
+    """Window already calibrated in a previous run (0 if none).
+
+    Claude Code does not write the real context window anywhere on disk, so the
+    hardcoded 200 000 default under-reports on models with a bigger window and
+    the bar reads >100 % (observed: a 297 316-token prompt answered normally).
+    Ratcheting the denominator up from prompts that actually got a reply keeps
+    the bar honest without inventing a number; it only ever moves upward.
+    """
+    try:
+        return int(json.loads((CLAUDE_DIR / ".token_status").read_text()).get("limit", 0))
+    except Exception:
+        return 0
+
+
+# Not typed by the user: slash-command plumbing, skill preambles injected as user
+# turns, image placeholders, tool plumbing. Keeping them buries the real prompts.
+_NOISE_PREFIXES = (
+    "[Tool result", "[Image:", "[Request interrupted",
+    "<local-command-", "<command-name>", "<command-message>", "<command-args>",
+    "<system-reminder>", "<bash-", "<user-prompt-submit-hook>",
+    "Caveat: The messages below",
+    "Base directory for this skill:",
+)
+
+
 def extract_user_messages(session_file: Path, last_n: int = 30) -> list[tuple]:
-    """Return the last N (timestamp, text) pairs for user turns."""
+    """Return the last N (timestamp, text) pairs for genuine user turns."""
     messages = []
     with open(session_file, encoding="utf-8") as fh:
         for raw in fh:
@@ -340,7 +366,9 @@ def extract_user_messages(session_file: Path, last_n: int = 30) -> list[tuple]:
                 d   = json.loads(raw)
                 msg = d.get("message", {})
                 ts  = parse_ts(d.get("timestamp"))
-                if msg.get("role") != "user":
+                # isMeta marks turns Claude Code injected rather than ones the
+                # user typed: slash-command bodies, skill preambles, hook output.
+                if msg.get("role") != "user" or d.get("isMeta") or d.get("isSidechain"):
                     continue
                 content = msg.get("content", "")
                 text = ""
@@ -351,7 +379,7 @@ def extract_user_messages(session_file: Path, last_n: int = 30) -> list[tuple]:
                             break
                 elif isinstance(content, str):
                     text = content.strip()
-                if text and not text.startswith("[Tool result"):
+                if text and not text.startswith(_NOISE_PREFIXES):
                     messages.append((ts, text[:200]))
             except Exception:
                 continue
@@ -382,7 +410,7 @@ def save_checkpoint(session_file: Path, pct_used: float, turns: int) -> Path | N
         "",
         f"**Session:** `{session_file.name}` | **Turns:** {turns} | **Usage:** {pct_used:.1f}%",
         "",
-        "### Recent user prompts (last 30)",
+        f"### Recent user prompts (last {len(messages)})",
         "",
     ]
     for ts, text in messages:
@@ -390,7 +418,8 @@ def save_checkpoint(session_file: Path, pct_used: float, turns: int) -> Path | N
         lines.append(f"- `{ts_str}` {text}")
     lines += [
         "",
-        "> Auto checkpoint — run `/session-report` for a full AI-generated session report.",
+        "> Auto checkpoint — prompts only. Run `/session-summary` before opening a new"
+        " session; this file cannot record what was done, verified, or left unfinished.",
     ]
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path
@@ -410,79 +439,53 @@ def session_start_ts(session_file: Path) -> datetime | None:
     return None
 
 
-# ── Official claude.ai usage API ──────────────────────────────────────────────
+# ── Official usage API (via OAuth token from ~/.claude/.credentials.json) ──────
+# Uses api.anthropic.com/api/oauth/usage — no browser cookies needed.
+# Access token auto-refreshed by Claude Code each session (~60min TTL).
+# Endpoint discovered: anthropic-beta: oauth-2025-04-20
 
-def _read_api_credentials() -> tuple[str | None, str | None]:
-    """Return (cookie_str, org_id).
-
-    cookie_str priority: CLAUDE_COOKIES env → ~/.claude/.claude_cookies file
-                         → build from CLAUDE_SESSION_KEY / ~/.claude/.claude_session_key
-    org_id priority:     CLAUDE_ORG_ID env  → ~/.claude/.claude_org_id file
-    Returns (None, None) if essential values are missing.
-    """
-    def _file(p: Path) -> str:
-        return p.read_text().strip()
-
-    # ── cookie string ──
-    cookie_str = os.environ.get("CLAUDE_COOKIES", "").strip()
-    if not cookie_str:
-        try:
-            cookie_str = _file(_COOKIES_FILE)
-        except Exception:
-            pass
-    if not cookie_str:
-        # fall back: build minimal cookie from sessionKey only
-        sk = os.environ.get("CLAUDE_SESSION_KEY", "").strip()
-        if not sk:
-            try:
-                sk = _file(_SESSION_KEY_FILE)
-            except Exception:
-                pass
-        if sk:
-            cookie_str = f"sessionKey={sk}"
-
-    # ── org id ──
-    org_id = os.environ.get("CLAUDE_ORG_ID", "").strip()
-    if not org_id:
-        try:
-            org_id = _file(_ORG_ID_FILE)
-        except Exception:
-            pass
-
-    if cookie_str and org_id:
-        return cookie_str, org_id
-    return None, None
+_CREDENTIALS_FILE = CLAUDE_DIR / ".credentials.json"
+_LAST_USAGE_ERROR = ""
 
 
-def _fetch_official_usage(cookie_str: str, org_id: str) -> dict | None:
-    """Query claude.ai/api/organizations/{org_id}/usage. Returns parsed JSON or None."""
+def _read_oauth_token() -> str | None:
+    """Return OAuth accessToken from ~/.claude/.credentials.json, or None."""
+    # env var override
+    token = os.environ.get("CLAUDE_OAUTH_TOKEN", "").strip()
+    if token:
+        return token
+    try:
+        data = json.loads(_CREDENTIALS_FILE.read_text())
+        token = data.get("claudeAiOauth", {}).get("accessToken", "").strip()
+        return token or None
+    except Exception:
+        return None
+
+
+def _fetch_official_usage(token: str, _unused: str = "") -> dict | None:
+    """Query api.anthropic.com/api/oauth/usage with Bearer token. Returns JSON or None."""
+    global _LAST_USAGE_ERROR
     from urllib.request import urlopen, Request
+    from urllib.error import HTTPError
 
-    url = f"https://claude.ai/api/organizations/{org_id}/usage"
-    req = Request(url, headers={
-        "cookie": cookie_str,
-        "user-agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/148.0.0.0 Safari/537.36"
-        ),
-        "accept": "application/json, text/plain, */*",
-        "accept-language": "en-US,en;q=0.9",
-        "referer": "https://claude.ai/settings/usage",
-        "sec-fetch-dest": "empty",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-site": "same-origin",
-        "sec-ch-ua": '"Chromium";v="148", "Google Chrome";v="148", "Not-A.Brand";v="99"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"Windows"',
-        "anthropic-client-platform": "web_claude_ai",
-    })
+    _LAST_USAGE_ERROR = ""
+    req = Request(
+        "https://api.anthropic.com/api/oauth/usage",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "anthropic-beta": "oauth-2025-04-20",
+            "content-type": "application/json",
+        },
+    )
     try:
         with urlopen(req, timeout=5) as resp:
             if resp.status == 200:
                 return json.loads(resp.read())
+            _LAST_USAGE_ERROR = f"http_{resp.status}"
+    except HTTPError as e:
+        _LAST_USAGE_ERROR = f"http_{e.code}"
     except Exception:
-        pass
+        _LAST_USAGE_ERROR = "request_failed"
     return None
 
 
@@ -494,18 +497,27 @@ def main():
         print(json.dumps({"systemMessage": f"[Claude_Code_Token_Status] No session file found in {PROJECT_DIR}"}))
         return
 
-    (inp, cache_create, cache_read,
+    (inp, cache_create, cache_read, max_prompt,
      output_total, turns, turns_today, window_start,
      cost_inp, cost_cc, cost_cr, cost_out,
      last_model) = parse_usage(session_file)
 
+    # A prompt that got a reply proves the window is at least that big. Context
+    # grows monotonically within a session, so calibrating to max_prompt exactly
+    # would pin the bar at 100 % forever — round up to the next 100k instead.
+    window = max(CONTEXT_WINDOW, observed_window_floor())
+    if max_prompt > window:
+        window = -(-max_prompt // 100_000) * 100_000
+
     # Try official API for accurate plan usage (non-blocking; falls back to estimate)
-    cookie_str, org_id = _read_api_credentials()
-    official = _fetch_official_usage(cookie_str, org_id) if cookie_str else None
+    # Uses OAuth token from ~/.claude/.credentials.json — no browser cookies needed.
+    oauth_token = _read_oauth_token()
+    official = _fetch_official_usage(oauth_token) if oauth_token else None
+    token_expired = (oauth_token is not None) and (official is None) and _LAST_USAGE_ERROR in {"http_401", "http_403"}
 
     context_used      = cache_read + cache_create + inp
-    context_remaining = max(0, CONTEXT_WINDOW - context_used)
-    pct_used          = context_used / CONTEXT_WINDOW * 100 if context_used else 0
+    context_remaining = max(0, window - context_used)
+    pct_used          = context_used / window * 100 if context_used else 0
 
     # progress bar (width configurable via CLAUDE_TOKEN_BAR_WIDTH)
     filled = int(BAR_WIDTH * pct_used / 100)
@@ -513,13 +525,13 @@ def main():
 
     # warnings + auto-checkpoint
     warn = checkpoint_note = ""
-    if pct_used >= 90:
+    if pct_used >= 85:
         saved = save_checkpoint(session_file, pct_used, turns)
         if saved:
             checkpoint_note = f"\n📌 Checkpoint saved: {saved.name}"
-        warn = f"  ⚠️  ≥90% — run /session-report then open a new session{checkpoint_note}"
+        warn = f"  ⚠️  ≥85% — run /session-summary then open a new session{checkpoint_note}"
     elif pct_used >= 75:
-        warn = "  ⚠️  ≥75% — consider /session-report to preserve progress"
+        warn = "  ⚠️  ≥75% — consider /session-summary to preserve progress"
 
     # cross-day session note
     now_local   = datetime.now(LOCAL_TZ)
@@ -595,6 +607,14 @@ def main():
     else:
         reset_line = "\n✅ Rate limit: RESET — fresh capacity"
 
+    if token_expired:
+        reset_line += "\n⚠️  Token 5h/7d: OAuth token expired — run `claude` once to auto-refresh"
+    elif oauth_token and official is None and _LAST_USAGE_ERROR:
+        if _LAST_USAGE_ERROR == "http_429":
+            reset_line += "\n⚠️  Token 5h/7d: usage API rate limited (429) — 暫時限流，稍後自動恢復"
+        else:
+            reset_line += f"\n⚠️  Token 5h/7d unavailable: usage API request failed ({_LAST_USAGE_ERROR})"
+
     # cost display
     session_cost = cost_inp + cost_cc + cost_cr + cost_out
     _, _, model_label = _model_pricing(last_model)
@@ -613,13 +633,49 @@ def main():
 
     msg = (
         f"\n{ctx_label.ljust(COL)}[{bar}] {pct_used:.0f}%"
-        f"  / {CONTEXT_WINDOW:,}   Rem {context_remaining:,}   Out {output_total:,}   {turns_display}{warn}"
+        f"  / {window:,}   Rem {context_remaining:,}   Out {output_total:,}   {turns_display}{warn}"
         f"{reset_line}"
         f"{cross_day_note}"
         f"{cost_line}\n"
         f"Session: {session_file.stem}"
     )
     print(json.dumps({"systemMessage": msg}))
+
+    # Persist for CLAUDE.md "每次回覆前讀取" rule
+    try:
+        now_utc = datetime.now(timezone.utc)
+        pct_5h = official["five_hour"]["utilization"] if official and official.get("five_hour") else None
+        reset_5h = ""
+        if official and official.get("five_hour", {}).get("resets_at"):
+            rt = parse_ts(official["five_hour"]["resets_at"])
+            if rt and (rt - now_utc).total_seconds() > 0:
+                h, rem = divmod(int((rt - now_utc).total_seconds()), 3600)
+                reset_5h = f"{h}h {rem // 60:02d}m"
+        pct_7d = official["seven_day"]["utilization"] if official and official.get("seven_day") else None
+        reset_7d = ""
+        if official and official.get("seven_day", {}).get("resets_at"):
+            rt7 = parse_ts(official["seven_day"]["resets_at"])
+            if rt7 and (rt7 - now_utc).total_seconds() > 0:
+                d7, rem7 = divmod(int((rt7 - now_utc).total_seconds()), 86400)
+                h7, rem7m = divmod(rem7, 3600)
+                reset_7d = f"{d7}d {h7}h {rem7m // 60:02d}m"
+        remaining_pct = round(100 - pct_used, 1)
+        cache_data = {
+            "used": context_used, "limit": window,
+            "remaining": context_remaining,
+            "output_total": output_total,
+            "remaining_pct": remaining_pct, "pct_used": round(pct_used, 1),
+            "reset_in": reset_5h,
+            "plan_5h_pct": pct_5h, "plan_5h_reset": reset_5h,
+            "plan_7d_pct": pct_7d, "plan_7d_reset": reset_7d,
+            "session": session_file.name[:8],
+            "updated_at": now_utc.isoformat(),
+        }
+        (CLAUDE_DIR / ".token_status").write_text(
+            json.dumps(cache_data, ensure_ascii=False)
+        )
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

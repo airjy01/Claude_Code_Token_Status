@@ -4,16 +4,16 @@ A Claude Code Stop hook that shows **context usage**, **session cost**, **offici
 
 Works with **all Claude Code plans**: Free, Pro, Max, and API (pay-per-token).
 
-**Two modes:**
-- **Estimate mode** (default, zero setup): rolling-window approximation from local JSONL
-- **Official mode** (optional credentials): real plan utilization % and exact reset time from claude.ai API
+Zero setup: the plan bars read the OAuth token Claude Code already writes to
+`~/.claude/.credentials.json`. If it is missing, the reset countdown falls back
+to a rolling-window estimate and the plan bars are hidden.
 
 ```
-Context (65,575)  [█████████░░░░░░░░░░░░░░░░░░░] 33%  / 200,000   Rem 134,425   Out 60,121   (86 turns)
-Token 5h:         [████████████████░░░░░░░░░░░░] 59% — reset in  0d 0h 57m  (13:00 06/08 Mon)
-Token 7d:         [█████████████░░░░░░░░░░░░░░░] 48% — reset in  2d 12h 57m  (01:00 06/11 Thu)
-API equiv. (est.): NT$75.8 (sonnet-4.6, NT$ ×31.65 (cached))  [in NT$0.01 + cw NT$12.0 + cr NT$35.2 + out NT$28.5]
-Session: 27fd1a7a-59d8-4863-b5a4-23bebe09cd6c
+Context (225,925)  [█████████████████████░░░░░░░] 75%  / 300,000   Rem 74,075   Out 167,678   (147 turns)
+Token 5h:          [██████████░░░░░░░░░░░░░░░░░░] 38% — reset in  0d 2h 31m  (18:00 07/31 Fri)
+Token 7d:          [█░░░░░░░░░░░░░░░░░░░░░░░░░░░] 7% — reset in  5d 9h 31m  (01:00 08/06 Thu)
+API equiv. (est.): NT$347 (claude-opus-5 (est.), NT$ ×32.38 (cached))  [in NT$0.03 + cw NT$45.7 + cr NT$221 + out NT$79.9]
+Session: 4260e9cf-632b-4a66-8b08-dceb7b3e97cb
 ```
 
 ---
@@ -23,12 +23,13 @@ Session: 27fd1a7a-59d8-4863-b5a4-23bebe09cd6c
 | Feature | Detail |
 |---|---|
 | **Context bar** | Visual progress bar + % + remaining tokens, all on one line |
-| **Token 5h bar** | Official claude.ai plan usage for the 5-hour window, with countdown + date/day |
-| **Token 7d bar** | Official claude.ai plan usage for the 7-day window, with countdown + date/day |
+| **Self-calibrating window** | Claude Code never writes the real context window to disk. Rather than guess, the denominator ratchets up from prompts that actually got a reply, so the bar can't read >100 % |
+| **Token 5h bar** | Official plan usage for the 5-hour window, with countdown + date/day |
+| **Token 7d bar** | Official plan usage for the 7-day window, with countdown + date/day |
 | **Session cost** | Per-model estimate: input + cache-write + cache-read + output (NTD or USD) |
 | **Model detection** | Auto-detects from session JSONL; unknown models flagged as `(est.)` |
 | **75% warning** | Prompts to run `/session-summary` |
-| **90%+ checkpoint** | Auto-saves last 30 user prompts to memory dir; once per hour max |
+| **85%+ checkpoint** | Auto-saves recent *typed* prompts to memory dir; once per hour max |
 | **Cross-project fallback** | Finds the most recent session JSONL even if Claude started from a different directory |
 | **Zero deps** | Pure Python 3.9+, no pip install required |
 
@@ -75,71 +76,25 @@ git clone https://github.com/airjy01/Claude_Code_Token_Status
 }
 ```
 
-### 3. (Optional) Enable official plan usage display (Token 5h / 7d)
+### 3. Official plan usage (Token 5h / 7d) — no setup
 
-This requires a valid claude.ai session cookie. Without it, the Token 5h/7d bars won't appear.
+Claude Code writes an OAuth access token to `~/.claude/.credentials.json` and
+refreshes it every session. The script reads that token and calls
+`api.anthropic.com/api/oauth/usage` for real plan utilization and reset times.
+Nothing to configure — the bars appear on the next response.
 
-**Step 1** — Run the one-time browser login (requires Playwright):
-
-```bash
-pip install playwright --break-system-packages
-playwright install chromium
-python3 ~/.claude/setup_playwright_auth.py
-```
-
-**Step 2** — Save your org UUID:
+If you need to override the token (CI, a second account):
 
 ```bash
-# Shown automatically during setup, or find it at:
-# https://claude.ai/api/organizations  (field: "uuid")
-echo 'your-org-uuid-here' > ~/.claude/.claude_org_id
+export CLAUDE_OAUTH_TOKEN='sk-ant-oat01-...'
 ```
 
-**Step 3** — (Optional) Auto-refresh cookies daily via cron:
+Without a usable token the plan bars are hidden and the reset countdown falls
+back to a rolling-window estimate (`~est`) computed from local timestamps.
 
-```bash
-(crontab -l 2>/dev/null; echo "50 23 * * * python3 ~/.claude/refresh_cookies.py >> ~/.claude/cookie_refresh.log 2>&1") | crontab -
-```
-
----
-
-## Official API Setup (Optional)
-
-Without setup, the reset countdown is a rolling-window estimate (`~est`).  
-With setup, you get the **exact plan utilization % and reset time** (`✓`) — same data as claude.ai Settings → Usage.
-
-**Why credentials are needed:** Claude Code CLI cannot access Anthropic's rate-limit data directly. The script calls the same internal API that the claude.ai web app uses, which requires browser session cookies.
-
-### One-time setup (~2 minutes)
-
-1. Open **chrome.ai/settings/usage** in Chrome
-2. Press **F12** → **Network** tab → click **Fetch/XHR** filter → refresh the page (F5)
-3. Click the **`usage`** request in the list
-4. In the **Headers** panel, copy:
-   - The full **Cookie:** header value (right-click → Copy value)
-   - The org UUID from the **Request URL** (`/api/organizations/<UUID>/usage`)
-5. Save to files:
-
-```bash
-echo '<paste full cookie string here>' > ~/.claude/.claude_cookies
-echo '<paste UUID here>'               > ~/.claude/.claude_org_id
-chmod 600 ~/.claude/.claude_cookies
-```
-
-**When to refresh:** The `cf_clearance` cookie expires periodically. When the `✓` disappears and `~est` returns, repeat steps 1–5.
-
-### Environment variable alternative
-
-```bash
-export CLAUDE_COOKIES="<full cookie string>"
-export CLAUDE_ORG_ID="<org UUID>"
-```
-
-Or use only `sessionKey` (may be blocked by Cloudflare without `cf_clearance`):
-
-```bash
-echo 'sk-ant-sid02-...' > ~/.claude/.claude_session_key
-```
+> Earlier versions scraped `claude.ai` with browser session cookies
+> (`.claude_cookies` / `.claude_org_id` / Playwright refresh). That path is gone —
+> delete those files if you still have them.
 
 ---
 
@@ -147,14 +102,15 @@ echo 'sk-ant-sid02-...' > ~/.claude/.claude_session_key
 
 | Variable | Default | Description |
 |---|---|---|
-| `CLAUDE_TOKEN_CONTEXT_WINDOW` | `200000` | Context window size |
+| `CLAUDE_TOKEN_CONTEXT_WINDOW` | `200000` | Starting context window size. Treated as a floor: if a larger prompt is seen, the denominator ratchets up to the next 100k and persists in `~/.claude/.token_status` |
 | `CLAUDE_TOKEN_RESET_HOURS` | `5` | Usage window length for estimate fallback (hours) |
 | `CLAUDE_TOKEN_TZ_OFFSET` | `8` | UTC offset (e.g. `-5` for US Eastern) |
 | `CLAUDE_TOKEN_CHECKPOINT_DIR` | `~/.claude/projects/<slug>/memory` | Checkpoint save directory |
 | `CLAUDE_TOKEN_MODEL` | auto | Override model for pricing |
 | `CLAUDE_TOKEN_BAR_WIDTH` | `28` | Progress bar width in characters |
 | `CLAUDE_TOKEN_CURRENCY` | `NTD` | `NTD` or `USD` |
-| `CLAUDE_COOKIES` | (file) | Full cookie string (overrides `~/.claude/.claude_cookies`) |
+| `CLAUDE_TOKEN_USD_TO_NTD` | live rate | Pin the exchange rate instead of fetching it |
+| `CLAUDE_OAUTH_TOKEN` | (auto) | Override the token read from `~/.claude/.credentials.json` |
 
 Example (US Eastern, USD, wider bar):
 
@@ -168,23 +124,15 @@ Example (US Eastern, USD, wider bar):
 }
 ```
 
-Cookie file locations (checked in order):
-
-```
-~/.claude/.claude_cookies   ← recommended (full cookie string, one line)
-CLAUDE_COOKIES env var
-CLAUDE_SESSION_KEY env var  ← sessionKey only (may be blocked by Cloudflare)
-```
-
 ---
 
 ## Output explained
 
 ```
-Context (65,575)  [█████████░░░░░░░░░░] 33%  / 200,000   Rem 134,425   Out 60,121   (86 turns)
-│                  │                    │      │            │              │             │
-│                  │                    │      total ctx    remaining      output        turns
-│                  bar                  %
+Context (225,925)  [█████████████████████░░░░░░░] 75%  / 300,000   Rem 74,075   Out 167,678   (147 turns)
+│                   │                             │      │            │             │             │
+│                   │                             │      total ctx    remaining     output        turns
+│                   bar                           %
 context tokens used (cache_read + cache_create + input)
 
 Token 5h:  [████████████████░░░] 59% — reset in  0d 0h 57m  (13:00 06/08 Mon)
@@ -195,8 +143,9 @@ official claude.ai plan utilization (from usage API)
 ```
 
 **Context tokens** = `cache_read + cache_creation + input` — the full context Claude processes each turn.  
+**total ctx** = calibrated window, not a published number. It is a *lower bound* proven by prompts that got a reply, rounded up to the next 100k.  
 **Out** = Claude's output tokens (not counted in context until the next turn).  
-**Token 5h / 7d** = official plan usage percentage from `claude.ai/api/organizations/{org}/usage`. Only visible when cookies are configured.
+**Token 5h / 7d** = official plan usage from `api.anthropic.com/api/oauth/usage`.
 
 ---
 
@@ -218,10 +167,10 @@ Auto-detected from session JSONL. Verify current rates at [anthropic.com/pricing
 
 | Plan | Context bar | Token 5h/7d | Notes |
 |---|---|---|---|
-| Free | ✅ | ✅ (with cookie) | |
-| Pro | ✅ | ✅ (with cookie) | |
-| Max | ✅ | ✅ (with cookie) | |
-| API (pay-per-token) | ✅ | ✅ (with cookie) | Cost display is actual cost |
+| Free | ✅ | ✅ | |
+| Pro | ✅ | ✅ | |
+| Max | ✅ | ✅ | |
+| API (pay-per-token) | ✅ | — | No subscription window; cost display is actual cost |
 | claude.ai Web | ❌ | ❌ | No local JSONL, CLI only |
 
 ---
@@ -230,14 +179,16 @@ Auto-detected from session JSONL. Verify current rates at [anthropic.com/pricing
 
 **Session file:** Auto-detects from `$PWD` → slug (`/home/user/proj` → `-home-user-proj`) → `~/.claude/projects/<slug>/`. Falls back to scanning all projects for the most recent `.jsonl` if the current directory doesn't match (useful when Claude Code is launched from varying directories).
 
-**Context window snapshot:** Uses the *last* assistant turn's token counts — not a sum. `cache_read` grows each turn (entire cached context is re-read), so summing would overcount.
+**Context window snapshot:** Uses the *last* assistant turn's token counts — not a sum. `cache_read` grows each turn (entire cached context is re-read), so summing would overcount. Sub-agent turns (`isSidechain`) share the same JSONL and are skipped, so a sub-agent's smaller prompt can't be mistaken for the main loop's context.
+
+**Window calibration:** Claude Code does not publish the real context window anywhere on disk, and a hardcoded 200 000 under-reports on larger models — a 297 316-token prompt was observed getting a normal reply, which the old code displayed as 149 %. The denominator now starts at `CLAUDE_TOKEN_CONTEXT_WINDOW` and ratchets upward whenever a bigger prompt succeeds, rounded up to the next 100k (context grows monotonically within a session, so calibrating to the exact maximum would pin the bar at 100 % forever). The calibrated value persists in `~/.claude/.token_status` and only ever moves up.
 
 **Cost calculation:** Sums per-turn charges across the session:  
 `input × rate + cache_write × 1.25×rate + cache_read × 0.10×rate + output × out_rate`
 
-**Token 5h/7d:** Calls `claude.ai/api/organizations/{org_id}/usage` with session cookies. Returns `utilization` (%) and `resets_at` (ISO timestamp). Raw token counts are not exposed by the API.
+**Token 5h/7d:** Calls `api.anthropic.com/api/oauth/usage` with the Bearer token from `~/.claude/.credentials.json`. Returns `utilization` (%) and `resets_at` (ISO timestamp). Raw token counts are not exposed by the API.
 
-**90% checkpoint:** Writes `session_checkpoint_YYYYMMDD_HHMM.md` to memory dir with last 30 user prompts. Deduplication prevents multiple writes per hour.
+**85% checkpoint:** Writes `session_checkpoint_YYYYMMDD_HHMM.md` to the memory dir with recent user prompts. Deduplication prevents multiple writes per hour. Turns Claude Code injected rather than ones you typed (`isMeta`: slash-command bodies, skill preambles, hook output) are filtered out, along with tool results and image placeholders — otherwise they bury the real prompts. The checkpoint captures *prompts only*; it cannot record what was done or verified, so treat it as a breadcrumb and run `/session-summary` for the real handoff.
 
 ---
 
@@ -254,8 +205,7 @@ Auto-detected from session JSONL. Verify current rates at [anthropic.com/pricing
 
 - Python 3.9+
 - Claude Code CLI (any version)
-- No external dependencies for core features
-- `playwright` + Chromium for cookie auto-refresh (optional)
+- No external dependencies
 
 ---
 
