@@ -93,3 +93,38 @@
 - 「Clef」「Laya」我查不到定義，貼文與留言都沒解釋；細節待讀官方指南。
 - 留言有人反映指南沒講清楚訓練資料格式，版主尚未在摘錄內回覆。
 - 與 Sword15 的關聯：4GB VRAM 的門檻低於 Strata 的 12GB，但 Sword15 的實際顯卡未確認。
+
+## 補充（資料日期 2026-10-08）
+
+### Alter Zero（已 clone 並讀 README，最後 commit 2026-10-06）
+
+| 項目 | 內容 |
+|---|---|
+| 連結 | https://github.com/linuztx/alter-zero |
+| 是什麼 | Rust 寫的終端機 coding agent，主打能操作互動式終端 session（非一次性 shell 指令） |
+| 版本與授權 | 0.12.0；Apache-2.0 |
+| 平台 | Linux（x86_64、arm64）、macOS；README 未列 Windows |
+| 注意 | 預設開啟每日一次匿名 ping（隨機安裝 ID、版本、OS、架構、Linux 發行版），可用設定、環境變數或 `DO_NOT_TRACK` 關閉（見 TELEMETRY.md） |
+| 來源貼文 | r/OpenSourceeAI（作者 u/linuztxx）；留言有人問與 optiq code 的比較，作者未在摘錄中回覆 |
+
+「RAM 效率高」是貼文標題的說法，我沒有量測，未驗證。
+
+### Strata 對其他模型的支援（r/LowEndLocalAI 貼文 + PR #1402）
+
+| 項目 | 內容 | 狀態 |
+|---|---|---|
+| PR | https://github.com/Niko1221/Strata/pull/1402 ，作者 aflin，2026-10-07 開，**Open、未合併** | 已確認（PR 頁面） |
+| 內容 | 讓引擎支援 qwen35moe 架構，新增 Qwen3.6-35B-A3B（UD-IQ4_XS、UD-IQ3_S）與 Ornith-1.5-35B-A3B；定位為 16 到 32GB RAM、6 到 12GB 顯卡 | 已確認（PR 描述） |
+| 作者測試 | RTX 4070 Ti 12GB、Linux；短對話 105 tok/s；與 llama.cpp b11438 貪婪輸出一致；未在 AMD 與 Windows 測過 | PR 作者自述 |
+| 網友實測 | RTX 2070 8GB + 32GB DDR4：輸出約 80 tok/s（0 context）、20k context 約 65；prompt 讀取 285 tok/s | 單一網友留言，未驗證，未說明量化版本 |
+| 留言抱怨 | 有人說 CMakeLists 有錯誤、安裝方式不清楚 | 單一留言，未驗證 |
+
+對 Sword15 的影響（推測）：主線 Strata README 要求 12GB VRAM；若 PR #1402 合併，8 到 12GB 卡才可能適用。目前仍是 PR，尚未合併，Sword15 規格也未確認。
+
+### r/MistralAI：「72% 的智慧，3.8% 的 GPU」
+
+- 這是一張圖表貼文（影片 18 秒），貼文本身沒有文字說明，圖中數字我看不到，無法確認。
+- 留言多數質疑指標：GPU 數量不等於 GPU 時數，也忽略 GPU 種類與訓練時間；有人指出缺少中國模型的對照。
+- 留言提到 Mistral 新資料中心有 13,800 顆 GB300，來源為網友引用的第三方文章，未驗證。
+- 留言裡的具體比例與月數估算（例如「落後 13 個月」）是網友自行推算，沒有來源。
+- 結論：這是帶有宣傳性質的圖表加討論串，沒有可收藏的 repo，只留作背景。
