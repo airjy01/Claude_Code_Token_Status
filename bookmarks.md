@@ -128,3 +128,19 @@
 - 留言提到 Mistral 新資料中心有 13,800 顆 GB300，來源為網友引用的第三方文章，未驗證。
 - 留言裡的具體比例與月數估算（例如「落後 13 個月」）是網友自行推算，沒有來源。
 - 結論：這是帶有宣傳性質的圖表加討論串，沒有可收藏的 repo，只留作背景。
+
+### r/SATNA_PROJECT：「建新 agent 前先看的 5 個 repo」（資料日期 2026-10-12；5 個 repo 皆已 clone 並核對）
+
+貼文作者與上一篇相同（文末導向自己的 Discord），屬社群貼文；下表「核對結果」是我讀 repo 的結果。
+
+| 名稱 | 連結 | 授權 | 最後 commit | 核對結果 |
+|---|---|---|---|---|
+| agency-agents | https://github.com/msitarzewski/agency-agents | MIT | 2026-10-08 | 依部門分類（engineering、design、marketing、sales、security、game-development、healthcare 等目錄皆在）；另有桌面 App（macOS、Linux、Windows），可安裝到 Claude Code、Cursor、Codex 等 |
+| wshobson/agents | https://github.com/wshobson/agents | MIT | 2026-10-04 | README 寫「94 個 plugin（92 本地 + 2 外部）、202 agents、184 skills、105 commands」；我數到 skills 184、commands 105 **相符**；agent 檔案我數到 758 個，與 202 不同，原因不明（推測含各工具版本的副本，未驗證） |
+| knowledge-work-plugins | https://github.com/anthropics/knowledge-work-plugins | Apache-2.0 | 2026-10-11 | **確認為 Anthropic 官方 org**；為 Claude Cowork 設計，也相容 Claude Code；目錄含 sales、customer-support、product-management、marketing、legal、finance、data 等 |
+| claude-quickstarts | https://github.com/anthropics/claude-quickstarts | MIT | 2026-10-07 | **確認為 Anthropic 官方 org**；需 Claude API key；README 明寫部分範例「不是 production code」；貼文提到的 Daily Brief（Slack + GitHub）、Linear、Sentry、Slack 範例都在 `managed-agents/` 下，customer-support-agent、financial-data-analyst 也在 |
+| agent-skills | https://github.com/addyosmani/agent-skills | MIT | 2026-10-10 | 貼文說 25 個 skill，我數到 **25 個 SKILL.md，相符**；含 spec-driven-development、test-driven-development、code-review-and-quality、security-and-hardening、ci-cd-and-automation 等 |
+
+- 貼文說「兩個是官方 Anthropic 專案」：核對屬實（knowledge-work-plugins、claude-quickstarts）。
+- 這 5 個 repo 我只讀了 README、目錄與計數，沒有安裝或執行任何東西，所以「好不好用」未驗證。
+- 與本 repo 的關聯：agent-skills 的「每步要驗證證據才算完成」做法，可對照 Dreaming 深睡階段的「評分過門檻才寫入」。
