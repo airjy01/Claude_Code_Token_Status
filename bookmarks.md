@@ -144,3 +144,18 @@
 - 貼文說「兩個是官方 Anthropic 專案」：核對屬實（knowledge-work-plugins、claude-quickstarts）。
 - 這 5 個 repo 我只讀了 README、目錄與計數，沒有安裝或執行任何東西，所以「好不好用」未驗證。
 - 與本 repo 的關聯：agent-skills 的「每步要驗證證據才算完成」做法，可對照 Dreaming 深睡階段的「評分過門檻才寫入」。
+
+### awesome-opus5-5-videos（資料日期 2026-10-13；已 clone 並核對，最後 commit 2026-10-12）
+
+| 項目 | 內容 |
+|---|---|
+| 連結 | https://github.com/yihui-dev/awesome-opus5-5-videos |
+| 是什麼 | 收集用 Claude Opus 5.5 以程式碼（HTML、Canvas、SVG、Three.js 等）做出的動畫影片，附創作者分享的提示詞與原貼文連結 |
+| 授權 | MIT（版權人 yihui-dev）；README 註明影片與提示詞版權屬各創作者 |
+| 規模 | `prompts/` 有 853 個檔案，`data/videos.json` 有 853 筆，與 README 的「853」相符 |
+| 欄位 | slug、作者、原貼文、分類、技術標籤、提示詞、是否有重製版 |
+| 內部數字不一致 | README 一處寫「523 個有 Skillry 重製版」，開頭寫 853 個提示詞；兩者指不同東西（總數 vs 有重製版），我沒有逐筆數 `has_remake` 驗證 |
+| 注意 | README 有 49 處導向 skillry.dev（含 utm 追蹤參數），這是作者的商業站台，預覽圖片與影片也託管在該站，非本 repo 內檔案 |
+| 與本 repo 的關聯 | 若想參考提示詞寫法，可直接讀 `prompts/*.md`；與之前的短影音收藏（video-talkcraft）互補，這邊偏「程式碼生成動畫」，不是口播剪輯 |
+
+影片本身我沒有看，只讀了 README、資料檔與一個提示詞檔，所以作品品質未評估。
