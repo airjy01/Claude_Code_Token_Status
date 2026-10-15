@@ -159,3 +159,33 @@
 | 與本 repo 的關聯 | 若想參考提示詞寫法，可直接讀 `prompts/*.md`；與之前的短影音收藏（video-talkcraft）互補，這邊偏「程式碼生成動畫」，不是口播剪輯 |
 
 影片本身我沒有看，只讀了 README、資料檔與一個提示詞檔，所以作品品質未評估。
+
+### REA: Reverse Engineer Anything（資料日期 2026-10-15；已 clone 並讀 README，最後 commit 2026-10-15）
+
+| 項目 | 內容 |
+|---|---|
+| 連結 | https://github.com/morluto/rea ；網站 https://rea.tools/ ；npm 套件 `rea-agents` |
+| 是什麼 | 本機執行的逆向工程 MCP：分析原生執行檔、JavaScript/Electron App、.NET、網站；可搭配 Hopper、Ghidra、IDA；結果附證據與限制 |
+| 版本與授權 | package.json 為 6.5.0；MIT（版權人 morluto） |
+| 需求 | Node `^22.19.0 \|\| ^24.11.0 \|\| >=26`；安裝 `npx rea-agents setup`，README 說支援 Claude Code、Codex、Cursor 等 |
+| 用途聲明 | DISCLAIMER.md 寫明用於合法分析（資安研究、CTF、互通性、除錯自己的軟體等），專案**不支援**規避 DRM、授權檢查、反作弊 |
+| 提醒 | README 警告請只從 morluto/rea、rea.tools、npm 取得，名稱相近的 repo 不一定是官方 |
+| 來源脈絡 | 出現在一則做市交易系統的提示詞截圖，該提示詞同時要求付費的 AgenKit；REA 本身是免費 MIT，兩者無必然關聯 |
+
+我只讀了 README 與 DISCLAIMER，沒有安裝或執行；逆向分析是否合法取決於你的所在地與對象軟體的條款，我不能判斷。
+
+### r/SATNA_PROJECT：opusplan 設定貼文（資料日期 2026-10-15）
+
+貼文作者同上，文末導向付費 Discord；貼文說法已用官方 [model-config 文件](https://code.claude.com/docs/en/model-config)核對（該頁最後約 16,700 字元我沒讀到）。
+
+| 貼文說法 | 核對結果 |
+|---|---|
+| `claude --model opusplan`：Plan Mode 用 Opus、執行用 Sonnet | **屬實**；也可用 `/model opusplan`、settings 的 `"model": "opusplan"` 或 `ANTHROPIC_MODEL` |
+| Haiku 子代理需自己建立，旗標不會自動設定 | 與官方 subagents 文件相符（`model: haiku` 屬 frontmatter） |
+| 別名依 provider 而異；Anthropic API 為 Opus 5.5、Sonnet 5.5、Haiku 5.5 | **屬實**；Foundry 的 `opus` 是 4.6、`sonnet`/`haiku` 是 4.5 |
+| 想用 1M context | 官方寫 `/model opusplan[1m]`，需 v2.1.265 以上 |
+| 能否「Opus max 規劃、Opus medium 執行」（留言問題） | 官方頁沒直接回答；只說 effort 依模型各自儲存，所以 Opus 與 Sonnet 可能各有 effort，但**未證實** |
+| 切換模型的快取成本 | 官方頁摘錄沒有細節，要看 prompt-caching 文件；留言「切換就會 cache hit」的說法我沒驗證 |
+
+- 留言的成本爭議（Sonnet 只便宜約 50%、以每個任務成本計才準）都是網友意見，沒有數據。
+- 官方另提供 advisor tool：由 Claude 在任務中途決定何時諮詢第二個模型，是 opusplan 之外的做法。
