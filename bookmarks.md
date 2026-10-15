@@ -189,3 +189,49 @@
 
 - 留言的成本爭議（Sonnet 只便宜約 50%、以每個任務成本計才準）都是網友意見，沒有數據。
 - 官方另提供 advisor tool：由 Claude 在任務中途決定何時諮詢第二個模型，是 opusplan 之外的做法。
+
+### 動態設計與影片渲染 20 個 repo（資料日期 2026-10-15；20 個全部已 clone，核對日期、授權與 README 首句）
+
+貼文原話：「agent 寫程式、skill 引導動態、引擎負責渲染；不是每個都產出影片，有些只做網頁動畫或 Lottie」。貼文也提醒安裝前先看 README、依賴與授權。以下「最後 commit」是我 clone 時讀到的日期。
+
+**A. 動態設計 skill 與工作流**
+
+| # | 名稱 | 連結 | 授權 | 最後 commit | 核對到的內容 |
+|---|---|---|---|---|---|
+| 1 | claude-motion | https://github.com/whaleyxbt/claude-motion | MIT | 2026-10-09 | 給 coding agent 的動態設計工具組：教品味、讓 agent 檢查自己的畫面、附音效引擎；以 Remotion 為基礎 |
+| 2 | claude-motion-design | https://github.com/howseen-ai/claude-motion-design | MIT | 2026-10-02 | 純程式碼做動態影片：HTML + Playwright + ffmpeg，宣稱不需 After Effects 或 Remotion 授權 |
+| 3 | motion-graphics-skills | https://github.com/charlie947/motion-graphics-skills | MIT | 2026-10-11 | 動態圖形 skill；README 開頭只有作者連結，用途細節我沒讀到 |
+| 4 | claude-remotion-skill | https://github.com/haidrrrry/claude-remotion-skill | MIT | 2026-08-12 | 教 Claude 用 Remotion 做動態圖形的 skill |
+| 5 | klik-anim-skill-creation | https://github.com/t3knobox/klik-anim-skill-creation | **無 LICENSE 檔** | 2026-08-07 | 產出動態圖形的 Claude skills；沒有授權檔，使用前要自行確認 |
+| 6 | hyperframes-motion-reel-skill | https://github.com/Sunwood-ai-labs/hyperframes-motion-reel-skill | MIT | 2026-09-30 | 以 HyperFrames 做動態短片的 skill；README 首句我沒讀到 |
+| 7 | product-launch-motion | https://github.com/AbubakrChan/product-launch-motion | MIT | 2026-10-15 | 產品發表動畫；README 首句我沒讀到 |
+| 8 | animate | https://github.com/cth9191/animate | MIT | 2026-10-05 | Claude Code skill：一個 `<canvas>`、程序化繪製與配樂，逐格確定性，用無頭瀏覽器 + ffmpeg 轉成 MP4 |
+| 9 | motion-design-skills | https://github.com/iart-ai/motion-design-skills | MIT | 2026-06-22 | 動態設計 skills；README 首句是安裝指令，用途細節我沒讀到 |
+| 10 | hyperframes-student-kit | https://github.com/nateherkai/hyperframes-student-kit | MIT | 2026-10-14 | Nate Herk 的影片剪輯工具組，支援 Codex 與 Claude Code，基於 HyperFrames；1,050 個檔案，含測試輸出 |
+
+**B. 渲染與動畫基礎**
+
+| # | 名稱 | 連結 | 授權 | 最後 commit | 核對到的內容 |
+|---|---|---|---|---|---|
+| 11 | HyperFrames | https://github.com/heygen-com/hyperframes | Apache-2.0 | 2026-10-15 | 把 HTML、CSS、媒體與可 seek 的動畫變成確定性 MP4；Node 22 以上；`npx skills add heygen-com/hyperframes`；README 列有 `/motion-graphics`、`/slideshow`、`/remotion-to-hyperframes` 等 skill |
+| 12 | Remotion | https://github.com/remotion-dev/remotion | **自訂授權** | 2026-10-15 | 個人、3 人以下營利組織、非營利可免費（含商用）；其他營利組織需買公司授權（remotion.pro）；LICENSE 註明 5.0 將微調 |
+| 13 | Remotion agent skills | https://github.com/remotion-dev/skills | **無 LICENSE 檔** | 2026-10-12 | Remotion 官方 skills；根目錄沒有授權檔，授權待確認 |
+| 14 | GSAP | https://github.com/greensock/GSAP | **GreenSock「免費」授權** | 2026-04-13 | package.json 為 3.15.0，授權見 gsap.com/standard-license，不是 MIT；我沒讀該授權全文 |
+
+**C. 更多 skill、函式庫與索引**
+
+| # | 名稱 | 連結 | 授權 | 最後 commit | 核對到的內容 |
+|---|---|---|---|---|---|
+| 15 | LottieFiles motion-design-skill | https://github.com/LottieFiles/motion-design-skill | MIT | 2026-05-18 | Lottie 動畫相關 skill；README 首句我沒讀到 |
+| 16 | awesome-motion-design-agent-skills | https://github.com/frankxai/awesome-motion-design-agent-skills | CC0 | 2026-10-14 | 精選清單，每項連到原始來源並附日期 |
+| 17 | motion-graphics | https://github.com/Barty-Bart/motion-graphics | MIT | 2026-10-13 | 動態圖形；README 首句我沒讀到 |
+| 18 | motion-dev-animations-skill | https://github.com/199-biotechnologies/motion-dev-animations-skill | MIT | 2026-03-30 | 用 Motion.dev 做網頁動畫的 skill（非影片） |
+| 19 | Motion | https://github.com/motiondivision/motion | MIT | 2026-10-15 | 網頁動畫函式庫（貼文標示為 Motion） |
+| 20 | lottie-web | https://github.com/airbnb/lottie-web | MIT | **2024-11-19** | Lottie 的網頁播放器；已近兩年無 commit |
+
+**這批要注意的授權與時效：**
+- Remotion 的免費條件不是一般開源授權：營利公司超過 3 人要買授權。HyperFrames（Apache-2.0）與 howseen-ai 的 Playwright + ffmpeg 做法是不受這個限制的替代路線（後者自述，我沒驗證）。
+- 有兩個 repo 沒有授權檔（#5、#13），GSAP 用自己的免費授權（#14），使用前都要自行確認。
+- lottie-web 最後 commit 是 2024-11-19，GSAP 是 2026-04-13，其餘多在 2026-08 之後有更新。
+- 我只讀了 README、授權與檔案數，沒有安裝或渲染過任何東西，所以產出品質未驗證。標「README 首句我沒讀到」的項目，是因為 README 開頭是徽章或安裝指令，不是用途說明。
+- 與先前收藏的關聯：video-talkcraft（口播影片，PolyForm Noncommercial）和 awesome-opus5-5-videos 都走「程式碼生成動畫」路線，這批可互相對照。
