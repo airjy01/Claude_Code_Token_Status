@@ -252,3 +252,33 @@
 | 與先前評估的關聯 | 這是「團隊協作台」的另一種做法：它不是讓不同家 AI 互相討論，而是讓**多人共用同一個 Claude Code 或 Codex session**，可對照 Multi-AI Chat Desktop 與原生 subagents |
 
 我只讀了 README 與授權文件，沒有部署或執行，所以功能是否如 README 所述、多人 session 的穩定度都未驗證。官方網站沒有讀，價格與雲端方案不明。把團隊的 AWS、GCP 帳號接給 agent 操作屬於高權限行為，README 提到這需要把你的部署身分設為對方帳號的信任主體；使用前應先理解權限範圍。
+
+### bilibili-douyin-notes（資料日期 2026-10-19；已 clone 並讀 README 與腳本標頭，最後 commit 2026-10-12）
+
+來源：X 帳號 GitHub_Daily 的貼文（貼文連結我沒讀到，內容是你貼的文字）。
+
+| 項目 | 內容 |
+|---|---|
+| 連結 | https://github.com/lucky-Luor/bilibili-douyin-notes |
+| 是什麼 | Agent Skill（遵循 SKILL.md 規範）：給一個 B站、抖音、YouTube 或小紅書的影片連結，整理成 Markdown 課堂筆記 |
+| 授權 | MIT（版權人 lucky-Luor）；另需使用者自行下載的抖音簽章檔 `abogus.py`，README 說明該檔依 GPLv3 處理 |
+| 版本與規模 | 52 個檔案，Python 3.10 以上，另有 CI 與離線測試 |
+
+**貼文說法的核對**
+
+| 貼文說法 | 結果 |
+|---|---|
+| 支援 B站、抖音、YouTube、小紅書 4 個平台 | **屬實**，README 與 `scripts/` 各有一支抓取腳本 |
+| 有字幕用字幕，沒字幕在本地做語音識別，不調付費 API | **README 這樣寫**（faster-whisper，CPU int8，用 hf-mirror 下載模型）；我沒有實際執行驗證 |
+| 小節、關鍵術語加粗、知識地圖、概念卡片、自測題 | README 列為筆記模板內容；示例檔 268 行 |
+| 文末有時間索引可跳回影片 | 示例檔含「時間索引」，我沒測試跳轉 |
+| 截圖：黑屏、模糊幀先標出，再由 AI 視覺複核 | README 寫法一致（像素占比法初篩，Agent 視覺複核）；未實測 |
+| 附李宏毅機器學習示例 | **屬實**：`examples/課堂筆記-01-局部最小值與鞍點.md` |
+
+**使用前要注意（讀 README 與腳本得到的）**
+1. 抖音是用「遊客 ttwid + a_bogus 簽章」下載無浮水印影片，等於自己計算平台的反爬簽章，**可能違反抖音使用條款**；a_bogus 檔案來自第三方專案（TikTokDownloader 系），授權為 GPLv3，與本專案 MIT 不同。
+2. 平台改版會讓抓取失效，這類腳本沒有穩定性保證；README 提到 B站字幕可選登入（SESSDATA Cookie），Cookie 屬於帳號憑證，不要放進筆記或提交。
+3. 下載或轉錄他人影片產生的筆記，版權與分享範圍要自己判斷。
+4. 我沒有安裝或執行，筆記品質、語音識別準確度、時間索引是否可用都未驗證。
+
+與先前收藏的關聯：可用來整理你之前蒐集的影片教學類內容（如 Remotion、HyperFrames 的教學影片），但只對有連結的影片有效。
