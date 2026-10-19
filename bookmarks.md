@@ -235,3 +235,20 @@
 - lottie-web 最後 commit 是 2024-11-19，GSAP 是 2026-04-13，其餘多在 2026-08 之後有更新。
 - 我只讀了 README、授權與檔案數，沒有安裝或渲染過任何東西，所以產出品質未驗證。標「README 首句我沒讀到」的項目，是因為 README 開頭是徽章或安裝指令，不是用途說明。
 - 與先前收藏的關聯：video-talkcraft（口播影片，PolyForm Noncommercial）和 awesome-opus5-5-videos 都走「程式碼生成動畫」路線，這批可互相對照。
+
+### Nuphos（資料日期 2026-10-19；已 clone 並讀 README、NOTICE、TRADEMARK，最後 commit 2026-10-18）
+
+| 項目 | 內容 |
+|---|---|
+| 連結 | https://github.com/nuphos/nuphos ；官網 https://nuphos.ai |
+| 是什麼 | 團隊用的 agent 工作區：多人進同一個 session、看到同樣的工具呼叫並共同操作；session 可在本機、自己的遠端機器或雲端 runtime 之間轉移 |
+| 支援的 agent | Claude Code 與 Codex，透過 [ACP](https://agentclientprotocol.com) 轉接；沿用你自己的訂閱帳號，README 說 Nuphos 不另收模型費用 |
+| 其他功能（README 自述） | 團隊共用 skill 與整合、內建跨 agent 記憶、排程與 webhook 觸發、Slack/Discord 接入、桌面端的 Kubernetes、Grafana、GitHub、Linear 等面板、分割視窗 |
+| 組成 | `apps/backend`（Bun/Hono）、`apps/desktop`（Electron）、`apps/runtime`（Claude/Codex 容器映像）、`apps/ios`、`apps/android` |
+| 授權 | Apache-2.0；版權 Zeabur Inc.；**名稱與 logo 是商標**，TRADEMARK.md 說明不在授權範圍內 |
+| 內含第三方 | `apps/runtime/openab` 取自 openabdev/openab，維持 MIT |
+| 自架 | 提供 Docker Compose（MongoDB、S3 相容儲存、backend、一個 runtime）、Zeabur 與 Railway 範本 |
+| 自架限制（README 自述） | 一個部署只有一個團隊；runtime 需自己在其主控台登入 Claude；Google 登入只在 Nuphos Cloud 可用；不含託管的 runtime 佈建與備份；Android 目前只支援 Nuphos Cloud 登入 |
+| 與先前評估的關聯 | 這是「團隊協作台」的另一種做法：它不是讓不同家 AI 互相討論，而是讓**多人共用同一個 Claude Code 或 Codex session**，可對照 Multi-AI Chat Desktop 與原生 subagents |
+
+我只讀了 README 與授權文件，沒有部署或執行，所以功能是否如 README 所述、多人 session 的穩定度都未驗證。官方網站沒有讀，價格與雲端方案不明。把團隊的 AWS、GCP 帳號接給 agent 操作屬於高權限行為，README 提到這需要把你的部署身分設為對方帳號的信任主體；使用前應先理解權限範圍。
